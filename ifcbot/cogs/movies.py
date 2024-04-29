@@ -54,6 +54,7 @@ class Movies(commands.Cog):
         movie_name = str(choosed_row[2])
         movie_str = f"Picked Movie:\nID: {movie_id} - {movie_name} "
         await ctx.reply(movie_str)
+        cursor.close()
 
 
     @commands.command(aliases=["LIST_MOVIES", "lm", "LM"])
@@ -111,6 +112,19 @@ class Movies(commands.Cog):
     async def watch_movie(self, ctx: commands.Context, movie_id: int):
         cursor = self.conn.cursor()
         cursor.execute("""UPDATE "movies" SET watched = 1 WHERE server_id = ? AND id = ?""",
+                       [self.guild_id(ctx), movie_id])
+        if cursor.rowcount > 0:
+            self.conn.commit()
+            await ctx.message.add_reaction("✅")
+
+        cursor.close()
+
+
+    @commands.command(aliases=["REMOVE_MOVIE", "rmm", "RMM"])
+    @commands.has_permissions(administrator=True)
+    async def remove_movie(self, ctx: commands.Context, movie_id: int):
+        cursor = self.conn.cursor()
+        cursor.execute("""DELETE FROM "movies" WHERE server_id = ? AND id = ?""",
                        [self.guild_id(ctx), movie_id])
         if cursor.rowcount > 0:
             self.conn.commit()
