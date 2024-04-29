@@ -20,7 +20,7 @@ class Other(commands.Cog):
 
     @commands.command()
     async def reply(self, ctx: commands.Context) -> None:
-        """ Replies with "{username} é muito gay\""""
+        """ Replies with "{username}" é muito gay"""
         await ctx.message.delete()
         await ctx.send(f"{ctx.author.display_name} é muito gay")
 
