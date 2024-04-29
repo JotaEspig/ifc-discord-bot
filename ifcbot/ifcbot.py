@@ -13,3 +13,10 @@ class BotIFC(commands.Bot):
         for filename in os.listdir("./ifcbot/cogs"):
             if filename.endswith(".py"):
                 await self.load_extension(f"ifcbot.cogs.{filename[:-3]}")
+
+
+    async def on_command_error(self, ctx: commands.Context, error, /) -> None:
+        if isinstance(error, commands.MissingPermissions):
+            await ctx.reply(f':hand_splayed: You are not allowed to use this command\n:hand_splayed: {error}')
+        else:
+            await ctx.author.send(error)
