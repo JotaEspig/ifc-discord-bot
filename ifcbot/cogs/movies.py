@@ -1,4 +1,5 @@
 import sqlite3
+import random
 
 import discord
 from discord.ext import commands
@@ -40,6 +41,19 @@ class Movies(commands.Cog):
             await ctx.send(f"Added movie \"{moviename}\"\nMovie ID: {cursor.lastrowid}")
 
         cursor.close()
+
+
+    @commands.command(aliases=["PICK_ONE_MOVIE", "pom", "POM"])
+    async def pick_one_movie(self, ctx: commands.Context):
+        cursor = self.conn.cursor()
+        cursor.execute("""SELECT * FROM "movies" WHERE "server_id" = ? AND "watched" = 0 """, [self.guild_id(ctx)])
+        movies = cursor.fetchall()
+
+        choosed_row = random.choice(movies)
+        movie_id = int(choosed_row[0])
+        movie_name = str(choosed_row[2])
+        movie_str = f"Picked Movie:\nID: {movie_id} - {movie_name} "
+        await ctx.reply(movie_str)
 
 
     @commands.command(aliases=["LIST_MOVIES", "lm", "LM"])
