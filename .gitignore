@@ -2,3 +2,5 @@ __pycache__/
 venv/*
 
 token.config
+ifcbot.zip
+*.db
