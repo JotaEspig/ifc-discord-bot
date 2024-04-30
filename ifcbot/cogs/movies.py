@@ -58,14 +58,19 @@ class Movies(commands.Cog):
 
 
     @commands.command(aliases=["LIST_MOVIES", "lm", "LM"])
-    async def list_movies(self, ctx: commands.Context):
+    async def list_movies(self, ctx: commands.Context, page: int = 1):
         cursor = self.conn.cursor()
-        cursor.execute("""SELECT * FROM "movies" WHERE "server_id" = ?""", [self.guild_id(ctx)])
+        cursor.execute("""SELECT count() as count FROM "movies" WHERE "server_id" = ?""",
+                       [self.guild_id(ctx)])
+        count = cursor.fetchone()[0]
+        cursor.execute("""SELECT * FROM "movies" WHERE "server_id" = ? LIMIT 25 OFFSET ?""",
+                       [self.guild_id(ctx), (page - 1) * 25])
         movies = cursor.fetchall()
 
         embed_title = f"Movies from {ctx.guild.name}" if ctx.guild else "Movies"
         embed = discord.Embed(
             title=embed_title,
+            description=f"Page: {page}/{(count - 1) // 25 + 1}",
             color=0x349a46
         )
         if ctx.author.avatar != None:
@@ -77,21 +82,26 @@ class Movies(commands.Cog):
             has_watched = bool(row[3])
             movie_str = f"ID: {movie_id} - Watched? " \
                         + (":white_check_mark:" if has_watched else ":x:")
-            embed.add_field(name=movie_name, value=movie_str, inline=False)
+            embed.add_field(name=movie_name, value=movie_str, inline=True)
 
         await ctx.send(embed=embed)
         cursor.close()
 
 
     @commands.command(aliases=["LIST_UNWATCHED_MOVIES", "lum", "LUM"])
-    async def list_unwatched_movies(self, ctx: commands.Context):
+    async def list_unwatched_movies(self, ctx: commands.Context, page: int = 1):
         cursor = self.conn.cursor()
-        cursor.execute("""SELECT * FROM "movies" WHERE "server_id" = ? AND watched = 0""", [self.guild_id(ctx)])
+        cursor.execute("""SELECT count() as count FROM "movies" WHERE "server_id" = ? AND "watched" = 0""",
+                       [self.guild_id(ctx)])
+        count = cursor.fetchone()[0]
+        cursor.execute("""SELECT * FROM "movies" WHERE "server_id" = ? AND watched = 0 LIMIT 25 OFFSET ?""",
+                       [self.guild_id(ctx), (page - 1) * 25])
         movies = cursor.fetchall()
 
         embed_title = f"Unwatched movies from {ctx.guild.name}" if ctx.guild else "Unwatched movies"
         embed = discord.Embed(
             title=embed_title,
+            description=f"Page: {page}/{(count - 1) // 25 + 1}",
             color=0x349a46
         )
         if ctx.author.avatar != None:
@@ -101,7 +111,7 @@ class Movies(commands.Cog):
             movie_id = int(row[0])
             movie_name = str(row[2])
             movie_str = f"ID: {movie_id}"
-            embed.add_field(name=movie_name, value=movie_str, inline=False)
+            embed.add_field(name=movie_name, value=movie_str, inline=True)
 
         await ctx.send(embed=embed)
         cursor.close()

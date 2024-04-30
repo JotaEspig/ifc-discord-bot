@@ -15,7 +15,6 @@ def main() -> None:
     if token == None:
         with open("./token.config", "r") as file:
             token = file.readline();
-            print(token)
 
     bot.run(token)
 
