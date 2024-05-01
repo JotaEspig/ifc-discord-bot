@@ -82,6 +82,7 @@ class Movies(commands.Cog):
         if not ok:
             await ctx.message.add_reaction("❌")
             await ctx.reply("You should use \"!setup_movies\" first")
+            return
 
         cursor = self.conn.cursor()
         cursor.execute(
