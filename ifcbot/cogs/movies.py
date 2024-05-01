@@ -1,5 +1,6 @@
 import sqlite3
 import random
+from time import sleep
 
 import discord
 from discord.ext import commands
@@ -10,12 +11,19 @@ class Movies(commands.Cog):
         self.bot = bot
         self.conn = sqlite3.connect("movies.db")
         self.conn.execute("""
-                          CREATE TABLE IF NOT EXISTS movies (
-                              id INTEGER PRIMARY KEY AUTOINCREMENT,
-                              server_id INTEGER,
-                              name TEXT,
-                              watched INTEGER
-                          );
+                          CREATE TABLE IF NOT EXISTS "movies" (
+                              "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+                              "server_id" INTEGER,
+                              "name" TEXT,
+                              "watched" INTEGER
+                          )
+                          """)
+        self.conn.execute("""
+                          CREATE TABLE IF NOT EXISTS "servers_roles" (
+                              "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+                              "server_id" INTEGER,
+                              "role_id" INTEGER
+                          )
                           """)
 
 
@@ -27,11 +35,56 @@ class Movies(commands.Cog):
         return ctx.message.guild.id if ctx.message.guild else 0
 
 
-    @commands.command(aliases=["ADD_MOVIE", "am", "AM"])
-    @commands.has_permissions(administrator=True)
-    async def add_movie(self, ctx: commands.Context, *, moviename: str):
+    def check_role(self, ctx: commands.Context) -> bool:
         cursor = self.conn.cursor()
-        cursor = cursor.execute(
+        cursor.execute("""SELECT "role_id" FROM "servers_roles" WHERE "server_id" = ?""",
+                       [self.guild_id(ctx)])
+        row = cursor.fetchone()
+        if row == None or len(row) == 0:
+            cursor.close()
+            return False
+
+        role_id = row[0]
+        if isinstance(ctx.author, discord.Member):
+            if ctx.author.get_role(role_id) == None:
+                cursor.close()
+                raise commands.MissingRole(role_id)
+
+        cursor.close()
+        return True
+
+
+    @commands.command(aliases=["SETUP_MOVIES", "sm", "Sm", "SM"])
+    @commands.has_permissions(administrator=True)
+    async def setup_movies(self, ctx: commands.Context, role: discord.Role):
+        cursor = self.conn.cursor()
+        cursor.execute("""SELECT count() FROM "servers_roles" WHERE "server_id" = ?""", [self.guild_id(ctx)])
+        count = cursor.fetchone()[0]
+        if count == 0:
+            cursor.execute("""INSERT INTO "servers_roles" ("server_id", "role_id") VALUES (?, ?)""",
+                       [self.guild_id(ctx), role.id])
+        else:
+            cursor.execute("""UPDATE "servers_roles" SET "role_id" = ? WHERE "server_id" = ?""",
+                           [role.id, self.guild_id(ctx)])
+
+        if cursor.rowcount > 0:
+            self.conn.commit()
+            await ctx.message.add_reaction("✅")
+        else:
+            await ctx.message.add_reaction("❌")
+
+        cursor.close()
+
+
+    @commands.command(aliases=["ADD_MOVIE", "am", "Am", "AM"])
+    async def add_movie(self, ctx: commands.Context, *, moviename: str):
+        ok = self.check_role(ctx)
+        if not ok:
+            await ctx.message.add_reaction("❌")
+            await ctx.reply("You should use \"!setup_movies\" first")
+
+        cursor = self.conn.cursor()
+        cursor.execute(
                 """INSERT INTO "movies" ("server_id", "name", "watched") VALUES (?, ?, ?)""",
                 [self.guild_id(ctx), moviename, 0]
         )
@@ -43,8 +96,8 @@ class Movies(commands.Cog):
         cursor.close()
 
 
-    @commands.command(aliases=["PICK_ONE_MOVIE", "pom", "POM"])
-    async def pick_one_movie(self, ctx: commands.Context):
+    @commands.command(aliases=["PICK_ONE_MOVIE", "pom", "Pom", "POM"])
+    async def pick_one_movie(self, ctx: commands.Context, seconds: int = 0):
         cursor = self.conn.cursor()
         cursor.execute("""SELECT * FROM "movies" WHERE "server_id" = ? AND "watched" = 0 """, [self.guild_id(ctx)])
         movies = cursor.fetchall()
@@ -52,15 +105,23 @@ class Movies(commands.Cog):
         choosed_row = random.choice(movies)
         movie_id = int(choosed_row[0])
         movie_name = str(choosed_row[2])
-        movie_str = f"Picked Movie:\nID: {movie_id} - {movie_name} "
-        await ctx.reply(movie_str)
+        movie_str = f"Picked Movie:\nID: {movie_id} - **{movie_name}**"
+
+        if seconds > 0:
+            await ctx.send(f"Revealing in {seconds} seconds")
+        while seconds > 0:
+            await ctx.send(f"{seconds}...")
+            sleep(1)
+            seconds -= 1
+
+        await ctx.send(movie_str)
         cursor.close()
 
 
-    @commands.command(aliases=["LIST_MOVIES", "lm", "LM"])
+    @commands.command(aliases=["LIST_MOVIES", "lm", "Lm", "LM"])
     async def list_movies(self, ctx: commands.Context, page: int = 1):
         cursor = self.conn.cursor()
-        cursor.execute("""SELECT count() as count FROM "movies" WHERE "server_id" = ?""",
+        cursor.execute("""SELECT count() FROM "movies" WHERE "server_id" = ?""",
                        [self.guild_id(ctx)])
         count = cursor.fetchone()[0]
         cursor.execute("""SELECT * FROM "movies" WHERE "server_id" = ? LIMIT 25 OFFSET ?""",
@@ -88,10 +149,10 @@ class Movies(commands.Cog):
         cursor.close()
 
 
-    @commands.command(aliases=["LIST_UNWATCHED_MOVIES", "lum", "LUM"])
+    @commands.command(aliases=["LIST_UNWATCHED_MOVIES", "lum", "Lum", "LUM"])
     async def list_unwatched_movies(self, ctx: commands.Context, page: int = 1):
         cursor = self.conn.cursor()
-        cursor.execute("""SELECT count() as count FROM "movies" WHERE "server_id" = ? AND "watched" = 0""",
+        cursor.execute("""SELECT count() FROM "movies" WHERE "server_id" = ? AND "watched" = 0""",
                        [self.guild_id(ctx)])
         count = cursor.fetchone()[0]
         cursor.execute("""SELECT * FROM "movies" WHERE "server_id" = ? AND watched = 0 LIMIT 25 OFFSET ?""",
@@ -117,7 +178,7 @@ class Movies(commands.Cog):
         cursor.close()
 
 
-    @commands.command(aliases=["WATCH_MOVIE", "wm", "WM"])
+    @commands.command(aliases=["WATCH_MOVIE", "wm", "Wm", "WM"])
     @commands.has_permissions(administrator=True)
     async def watch_movie(self, ctx: commands.Context, movie_id: int):
         cursor = self.conn.cursor()
@@ -130,7 +191,7 @@ class Movies(commands.Cog):
         cursor.close()
 
 
-    @commands.command(aliases=["REMOVE_MOVIE", "rmm", "RMM"])
+    @commands.command(aliases=["REMOVE_MOVIE", "rmm", "Rmm", "RMM"])
     @commands.has_permissions(administrator=True)
     async def remove_movie(self, ctx: commands.Context, movie_id: int):
         cursor = self.conn.cursor()
@@ -143,7 +204,7 @@ class Movies(commands.Cog):
         cursor.close()
 
 
-    @commands.command(aliases=["REMOVE_ALL_MOVIES", "rmmall", "RMMALL"])
+    @commands.command(aliases=["REMOVE_ALL_MOVIES", "rmmall", "Rmmall", "RMMALL"])
     @commands.has_permissions(administrator=True)
     async def remove_all_movies(self, ctx: commands.Context):
         cursor = self.conn.cursor()
