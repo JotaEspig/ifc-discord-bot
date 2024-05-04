@@ -1,12 +1,17 @@
 import sqlite3
 import random
 from time import sleep
+from typing import Union
 
 import discord
 from discord.ext import commands
 
 
 class Movies(commands.Cog):
+    poll_emojis = ["1️⃣", "2️⃣", "3️⃣", "4️⃣", "5️⃣", "6️⃣", "7️⃣",
+                   "8️⃣", "9️⃣"]
+
+
     def __init__(self, bot: commands.Bot) -> None:
         self.bot = bot
         self.conn = sqlite3.connect("movies.db")
@@ -72,6 +77,40 @@ class Movies(commands.Cog):
             await ctx.message.add_reaction("✅")
         else:
             await ctx.message.add_reaction("❌")
+
+        cursor.close()
+
+
+    @commands.command(aliases=["POLL_MOVIES", "pm", "Pm", "PM"])
+    @commands.has_permissions(administrator=True)
+    async def poll_movies(self, ctx: commands.Context, amount: int = 4) -> None:
+        ok = self.check_role(ctx)
+        if not ok:
+            await ctx.message.add_reaction("❌")
+            await ctx.reply("You should use \"!setup_movies\" first")
+            return
+
+        if amount > 9:
+            await ctx.send("Invalid amount")
+            return
+
+        cursor = self.conn.cursor()
+        cursor.execute("""SELECT "name" FROM "movies" WHERE "server_id" = ? AND "watched" = 0""", [self.guild_id(ctx)])
+        movies = cursor.fetchall()
+        choosed_movies = random.sample(movies, amount)
+        embed = discord.Embed(
+            title="Choose the movie!",
+            color=0x349a46
+        )
+        for i in range(amount):
+            row = choosed_movies[i]
+            emoji = self.poll_emojis[i]
+            movie_name = row[0]
+            embed.add_field(name=movie_name, value=emoji, inline=False)
+
+        msg = await ctx.send(embed=embed)
+        for i in range(amount):
+            await msg.add_reaction(self.poll_emojis[i])
 
         cursor.close()
 
