@@ -14,7 +14,7 @@ def main() -> None:
     token = os.getenv("IFC_BOT_TOKEN")
     if token == None:
         with open("./token.config", "r") as file:
-            token = file.readline();
+            token = file.readline()
 
     bot.run(token)
 
