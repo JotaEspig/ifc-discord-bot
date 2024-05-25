@@ -19,7 +19,8 @@ class Movies(commands.Cog):
                               "id" INTEGER PRIMARY KEY AUTOINCREMENT,
                               "server_id" INTEGER,
                               "name" TEXT,
-                              "watched" INTEGER
+                              "watched" INTEGER,
+                              "rating" REAL
                           )
                           """)
         self.conn.execute("""
@@ -120,8 +121,8 @@ class Movies(commands.Cog):
 
         cursor = self.conn.cursor()
         cursor.execute(
-            """INSERT INTO "movies" ("server_id", "name", "watched") VALUES (?, ?, ?)""",
-            [self.guild_id(ctx), moviename, 0]
+            """INSERT INTO "movies" ("server_id", "name", "watched", "rating") VALUES (?, ?, 0, 0.0)""",
+            [self.guild_id(ctx), moviename]
         )
 
         if cursor.lastrowid != 0:
@@ -177,8 +178,43 @@ class Movies(commands.Cog):
             movie_id = int(row[0])
             movie_name = str(row[2])
             has_watched = bool(row[3])
+            rating = float(row[4])
             movie_str = f"ID: {movie_id} - Watched? " \
                 + (":white_check_mark:" if has_watched else ":x:")
+            if has_watched:
+                movie_str += f"\nRating: **{rating}**"
+            embed.add_field(name=movie_name, value=movie_str, inline=True)
+
+        await ctx.send(embed=embed)
+        cursor.close()
+
+    @commands.command(aliases=["LIST_WATCHED_MOVIES", "lwm", "Lwm", "LWM"])
+    async def list_watched_movies(self, ctx: commands.Context, page: int = 1):
+        cursor = self.conn.cursor()
+        cursor.execute("""SELECT count() FROM "movies" WHERE "server_id" = ? AND "watched" = 1""",
+                       [self.guild_id(ctx)])
+        count = cursor.fetchone()[0]
+        cursor.execute("""SELECT * FROM "movies" WHERE "server_id" = ? AND "watched" = 1 LIMIT 25 OFFSET ?""",
+                       [self.guild_id(ctx), (page - 1) * 25])
+        movies = cursor.fetchall()
+        movies.sort(key=lambda x: x[4], reverse=True)
+
+        embed_title = f"Movies from {
+            ctx.guild.name}" if ctx.guild else "Movies"
+        embed = discord.Embed(
+            title=embed_title,
+            description=f"Page: {page}/{(count - 1) // 25 + 1}",
+            color=0x349a46
+        )
+        if ctx.author.avatar != None:
+            embed.set_footer(text=f"Replying: {
+                             ctx.author.display_name}", icon_url=ctx.author.avatar.url)
+
+        for row in movies:
+            movie_id = int(row[0])
+            movie_name = str(row[2])
+            rating = float(row[4])
+            movie_str = f"ID: {movie_id} - Rating: **{rating}**"
             embed.add_field(name=movie_name, value=movie_str, inline=True)
 
         await ctx.send(embed=embed)
@@ -218,8 +254,34 @@ class Movies(commands.Cog):
     @commands.has_permissions(administrator=True)
     async def watch_movie(self, ctx: commands.Context, movie_id: int):
         cursor = self.conn.cursor()
-        cursor.execute("""UPDATE "movies" SET watched = 1 WHERE server_id = ? AND id = ?""",
+        cursor.execute("""UPDATE "movies" SET "watched" = 1 WHERE "server_id" = ? AND "id" = ?""",
                        [self.guild_id(ctx), movie_id])
+        if cursor.rowcount > 0:
+            self.conn.commit()
+            await ctx.message.add_reaction("✅")
+
+        cursor.close()
+
+    @commands.command(aliases=["RATE_MOVIE", "rm", "Rm", "RM"])
+    @commands.has_permissions(administrator=True)
+    async def rate_movie(self, ctx: commands.Context, movie_id: int, rating: float):
+        cursor = self.conn.cursor()
+        cursor.execute("""SELECT "watched" FROM "movies" WHERE "server_id" = ? AND "id" = ?""",
+                       [self.guild_id(ctx), movie_id])
+        movie = cursor.fetchone()
+        if movie is None:
+            await ctx.message.add_reaction("❌")
+            cursor.close()
+            return
+
+        has_watched = movie[0]
+        if not has_watched:
+            await ctx.message.add_reaction("❌")
+            cursor.close()
+            return
+
+        cursor.execute("""UPDATE "movies" SET rating = ? WHERE server_id = ? AND id = ?""",
+                       [rating, self.guild_id(ctx), movie_id])
         if cursor.rowcount > 0:
             self.conn.commit()
             await ctx.message.add_reaction("✅")
